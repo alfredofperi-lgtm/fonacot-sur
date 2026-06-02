@@ -183,7 +183,7 @@ function PantallaLogin({ onLogin }) {
 
 export default function App() {
   const [usuario, setUsuario]             = useState(null);
-  const [data, setData]                   = useState({});
+  const [data, setData]                   = useState(buildData([]).data);
   const [cargando, setCargando]           = useState(true);
   const [guardando, setGuardando]         = useState(false);
   const [errorConexion, setErrorConexion] = useState(null);
