@@ -265,9 +265,9 @@ export default function App() {
 
   const esperadoHoy = (meta) => Math.round((meta / diasHabiles) * diaActual);
 
-  if (!usuario) return <PantallaLogin onLogin={u => { setUsuario(u); if (u.tipo === "regional") setConfigAbierta(true); }} />;
+  if (!usuario) return <PantallaLogin onLogin={u => { setUsuario(u); }} />;
 
-  const region = totalRegion(data);
+  const region = totalRegion(data || {});
   const pctR   = pctVsEsperado(region.realM, region.metaM, diaActual, diasHabiles);
   const semR   = semaforo(pctR);
 
