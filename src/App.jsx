@@ -44,11 +44,11 @@ const METAS_MONTO = {
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
 const ROLES = {
-  "DIR-REGIONAL":    { tipo: "regional",   label: "Director Regional",     clave: "sur2026" },
-  "DIR-VILLAHERMOSA":{ tipo: "direccion",  dir: "Villahermosa",            label: "Director Villahermosa", clave: "villa2026" },
-  "DIR-MERIDA":      { tipo: "direccion",  dir: "Mérida",                  label: "Director Mérida",       clave: "merida2026" },
-  "DIR-TUXTLA":      { tipo: "direccion",  dir: "Tuxtla Gutiérrez",        label: "Director Tuxtla",       clave: "tuxtla2026" },
-  "DIR-PUEBLA":      { tipo: "direccion",  dir: "Puebla",                  label: "Director Puebla",       clave: "puebla2026" },
+  "DIR-REGIONAL":     { tipo: "regional",  label: "Director Regional",     clave: "sur2026" },
+  "DIR-VILLAHERMOSA": { tipo: "direccion", dir: "Villahermosa",            label: "Director Villahermosa", clave: "villa2026" },
+  "DIR-MERIDA":       { tipo: "direccion", dir: "Mérida",                  label: "Director Mérida",       clave: "merida2026" },
+  "DIR-TUXTLA":       { tipo: "direccion", dir: "Tuxtla Gutiérrez",        label: "Director Tuxtla",       clave: "tuxtla2026" },
+  "DIR-PUEBLA":       { tipo: "direccion", dir: "Puebla",                  label: "Director Puebla",       clave: "puebla2026" },
 };
 
 const SUCURSALES_CLAVES = {
@@ -62,9 +62,8 @@ const SUCURSALES_CLAVES = {
   "Xalapa": "xal2026", "Poza Rica": "poza2026",
 };
 
-// Fila especial en Sheets para guardar configuración del período
-const CONFIG_DIR    = "__CONFIG__";
-const CONFIG_SUC    = "__PERIODO__";
+const CONFIG_DIR = "__CONFIG__";
+const CONFIG_SUC = "__PERIODO__";
 
 function semaforo(pct) {
   if (pct >= 90) return { color: "#16a34a", bg: "#dcfce7", label: "Óptimo" };
@@ -72,9 +71,10 @@ function semaforo(pct) {
   return { color: "#dc2626", bg: "#fee2e2", label: "Crítico" };
 }
 
-function pctVsEsperado(acum, meta, diaActual, diasHabiles) {
-  if (!meta || !diasHabiles || !diaActual) return 0;
-  const esp = (meta / diasHabiles) * diaActual;
+// Porcentaje siempre sobre días BASE
+function pctVsEsperado(acum, meta, diaBase, diasBase) {
+  if (!meta || !diasBase || !diaBase) return 0;
+  const esp = (meta / diasBase) * diaBase;
   return esp ? Math.round((acum / esp) * 100) : 0;
 }
 
@@ -91,7 +91,19 @@ function buildData(rows) {
   let config = null;
   rows.forEach(r => {
     if (r.Direccion === CONFIG_DIR && r.Sucursal === CONFIG_SUC) {
-      config = { diasHabiles: Number(r.DiaHabil), diaActual: Number(r.Monto) };
+      // DiaHabil = configuración codificada: "diasOp|diasBase|diaOp|diaBase"
+      const parts = String(r.DiaHabil).split("|");
+      if (parts.length === 4) {
+        config = {
+          diasOperativos: Number(parts[0]),
+          diasBase:       Number(parts[1]),
+          diaOperativo:   Number(parts[2]),
+          diaBase:        Number(parts[3]),
+        };
+      } else {
+        // compatibilidad con formato anterior
+        config = { diasOperativos: 26, diasBase: Number(r.DiaHabil) || 22, diaOperativo: Number(r.Monto) || 1, diaBase: Number(r.Monto) || 1 };
+      }
       return;
     }
     const dir = r.Direccion, suc = r.Sucursal, dia = Number(r.DiaHabil), monto = Number(r.Monto);
@@ -110,7 +122,7 @@ function buildData(rows) {
 function acumulado(suc) { return (suc.diasCapturados || []).reduce((acc, d) => acc + d.monto, 0); }
 function totalDir(data, dir) {
   let metaM = 0, realM = 0;
-  Object.values(data[dir]).forEach(s => { metaM += s.metaMonto; realM += acumulado(s); });
+  Object.values(data[dir] || {}).forEach(s => { metaM += s.metaMonto; realM += acumulado(s); });
   return { metaM, realM };
 }
 function totalRegion(data) {
@@ -182,19 +194,22 @@ function PantallaLogin({ onLogin }) {
 }
 
 export default function App() {
-  const [usuario, setUsuario]             = useState(null);
-  const [data, setData]                   = useState(buildData([]).data);
-  const [cargando, setCargando]           = useState(true);
-  const [guardando, setGuardando]         = useState(false);
-  const [errorConexion, setErrorConexion] = useState(null);
-  const [ultimaSync, setUltimaSync]       = useState(null);
+  const [usuario, setUsuario]               = useState(null);
+  const [data, setData]                     = useState(buildData([]).data);
+  const [cargando, setCargando]             = useState(true);
+  const [guardando, setGuardando]           = useState(false);
+  const [errorConexion, setErrorConexion]   = useState(null);
+  const [ultimaSync, setUltimaSync]         = useState(null);
 
-  const [diasHabiles, setDiasHabiles]     = useState(22);
-  const [diaActual, setDiaActual]         = useState(1);
-  const [mesActual, setMesActual]         = useState(5);
-  const [anioActual, setAnioActual]       = useState(2026);
-  const [configAbierta, setConfigAbierta] = useState(false);
-  const [configForm, setConfigForm]       = useState({ diasHabiles: 22, diaActual: 1, mes: 5, anio: 2026 });
+  // Período
+  const [diasOperativos, setDiasOperativos] = useState(26);
+  const [diasBase, setDiasBase]             = useState(22);
+  const [diaOperativo, setDiaOperativo]     = useState(1);
+  const [diaBase, setDiaBase]               = useState(1);
+  const [mesActual, setMesActual]           = useState(5);
+  const [anioActual, setAnioActual]         = useState(2026);
+  const [configAbierta, setConfigAbierta]   = useState(false);
+  const [configForm, setConfigForm]         = useState({ diasOperativos: 26, diasBase: 22, diaOperativo: 1, diaBase: 1, mes: 5, anio: 2026 });
 
   const [vista, setVista]       = useState("dashboard");
   const [dirSel, setDirSel]     = useState(null);
@@ -202,7 +217,7 @@ export default function App() {
   const [montoInput, setMontoInput] = useState("");
   const [editDia, setEditDia]   = useState(null);
 
-  const mesLabel = `${MESES[mesActual]} ${anioActual}`;
+  const mesLabel    = `${MESES[mesActual]} ${anioActual}`;
   const esRegional  = usuario?.tipo === "regional";
   const esDireccion = usuario?.tipo === "direccion";
   const esSucursal  = usuario?.tipo === "sucursal";
@@ -217,8 +232,10 @@ export default function App() {
       const { data: d, config } = buildData(Array.isArray(rows) ? rows : []);
       setData(d);
       if (config) {
-        setDiasHabiles(config.diasHabiles);
-        setDiaActual(config.diaActual);
+        setDiasOperativos(config.diasOperativos);
+        setDiasBase(config.diasBase);
+        setDiaOperativo(config.diaOperativo);
+        setDiaBase(config.diaBase);
       }
       setUltimaSync(new Date());
     } catch (e) {
@@ -252,35 +269,43 @@ export default function App() {
   const borrarEnSheets = async (dir, suc, dia) => { await guardarEnSheets(dir, suc, dia, null); };
 
   const guardarConfig = async () => {
-    const dh = Number(configForm.diasHabiles) || 22;
-    const da = Number(configForm.diaActual) || 1;
-    setDiasHabiles(dh);
-    setDiaActual(da);
+    const dOp  = Number(configForm.diasOperativos) || 26;
+    const dBase = Number(configForm.diasBase) || 22;
+    const diaOp = Number(configForm.diaOperativo) || 1;
+    const diaB  = Number(configForm.diaBase) || 1;
+    setDiasOperativos(dOp);
+    setDiasBase(dBase);
+    setDiaOperativo(diaOp);
+    setDiaBase(diaB);
     setMesActual(Number(configForm.mes));
     setAnioActual(Number(configForm.anio) || 2026);
     setConfigAbierta(false);
-    // Guardar configuración en Sheets para que todos la vean
-    await guardarEnSheets(CONFIG_DIR, CONFIG_SUC, dh, da);
+    // Guardar en Sheets: codificamos los 4 valores en DiaHabil
+    const coded = `${dOp}|${dBase}|${diaOp}|${diaB}`;
+    await guardarEnSheets(CONFIG_DIR, CONFIG_SUC, coded, 0);
   };
 
-  const esperadoHoy = (meta) => Math.round((meta / diasHabiles) * diaActual);
+  // Meta esperada siempre sobre días BASE
+  const esperadoBase = (meta) => Math.round((meta / diasBase) * diaBase);
 
-  if (!usuario) return <PantallaLogin onLogin={u => { setUsuario(u); }} />;
+  if (!usuario) return <PantallaLogin onLogin={u => setUsuario(u)} />;
 
   const region = totalRegion(data || {});
-  const pctR   = pctVsEsperado(region.realM, region.metaM, diaActual, diasHabiles);
+  const pctR   = pctVsEsperado(region.realM, region.metaM, diaBase, diasBase);
   const semR   = semaforo(pctR);
 
-  // ── MODAL CONFIG (solo regional) ─────────────────────────────────────
+  // ── MODAL CONFIG ─────────────────────────────────────────────────────
   const ModalConfig = () => (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.65)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 420, overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,0.25)" }}>
+      <div style={{ background: "#fff", borderRadius: 20, width: "100%", maxWidth: 440, overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,0.25)" }}>
         <div style={{ background: "linear-gradient(135deg,#1e293b,#0f172a)", padding: "22px 28px", color: "#fff" }}>
           <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, letterSpacing: 2, textTransform: "uppercase" }}>FONACOT · Región Sur</div>
           <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2 }}>Configuración del período</div>
           <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>Se actualizará para todos los usuarios</div>
         </div>
-        <div style={{ padding: 28, display: "flex", flexDirection: "column", gap: 18 }}>
+        <div style={{ padding: 28, display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Mes y año */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 6 }}>🗓️ Mes</label>
@@ -296,19 +321,49 @@ export default function App() {
                 style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
             </div>
           </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 6 }}>⚙️ Días hábiles del mes</label>
-            <input type="number" min="1" max="31" value={configForm.diasHabiles}
-              onChange={e => setConfigForm(p => ({ ...p, diasHabiles: e.target.value }))}
-              style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 16, outline: "none", boxSizing: "border-box" }} />
+
+          {/* Totales del mes */}
+          <div style={{ background: "#f8fafc", borderRadius: 12, padding: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: .5, marginBottom: 12 }}>Total de días del mes</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 6 }}>📋 Días Operativos</label>
+                <input type="number" min="1" max="31" value={configForm.diasOperativos}
+                  onChange={e => setConfigForm(p => ({ ...p, diasOperativos: e.target.value }))}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 15, outline: "none", boxSizing: "border-box" }} />
+                <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>Lunes a sábado</div>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 6 }}>📊 Días Base</label>
+                <input type="number" min="1" max="31" value={configForm.diasBase}
+                  onChange={e => setConfigForm(p => ({ ...p, diasBase: e.target.value }))}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 15, outline: "none", boxSizing: "border-box" }} />
+                <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>Solo lunes a viernes</div>
+              </div>
+            </div>
           </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 6 }}>📍 Día hábil actual</label>
-            <input type="number" min="1" value={configForm.diaActual}
-              onChange={e => setConfigForm(p => ({ ...p, diaActual: e.target.value }))}
-              style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid #e2e8f0", fontSize: 16, outline: "none", boxSizing: "border-box" }} />
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Este valor se guardará en Sheets y todos lo verán</div>
+
+          {/* Día actual */}
+          <div style={{ background: "#f0fdf4", borderRadius: 12, padding: 14, border: "1px solid #bbf7d0" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#16a34a", textTransform: "uppercase", letterSpacing: .5, marginBottom: 12 }}>Día actual</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 6 }}>📋 Día Operativo actual</label>
+                <input type="number" min="1" value={configForm.diaOperativo}
+                  onChange={e => setConfigForm(p => ({ ...p, diaOperativo: e.target.value }))}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid #bbf7d0", fontSize: 15, outline: "none", boxSizing: "border-box" }} />
+                <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>¿En qué día operativo vamos?</div>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 6 }}>📊 Día Base actual</label>
+                <input type="number" min="1" value={configForm.diaBase}
+                  onChange={e => setConfigForm(p => ({ ...p, diaBase: e.target.value }))}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid #bbf7d0", fontSize: 15, outline: "none", boxSizing: "border-box" }} />
+                <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>¿Cuántos días base han pasado?</div>
+              </div>
+            </div>
           </div>
+
           <button onClick={guardarConfig} style={{ padding: "13px", borderRadius: 10, border: "none", background: "#0f172a", color: "#fff", fontFamily: "inherit", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
             Guardar y aplicar para todos →
           </button>
@@ -317,34 +372,35 @@ export default function App() {
     </div>
   );
 
-  // ── COMPONENTE DE CAPTURA (reutilizable) ─────────────────────────────
+  // ── PANEL DE CAPTURA ─────────────────────────────────────────────────
   const PanelCaptura = ({ dir, suc }) => {
     const col = COLORES[dir];
-    const s   = data[dir]?.[suc] || { metaMonto: METAS_MONTO[suc] || 0, diasCapturados: [] };
+    const s   = (data[dir] && data[dir][suc]) ? data[dir][suc] : { metaMonto: METAS_MONTO[suc] || 0, diasCapturados: [] };
     const acu = acumulado(s);
-    const pm  = pctVsEsperado(acu, s.metaMonto, diaActual, diasHabiles);
+    const pm  = pctVsEsperado(acu, s.metaMonto, diaBase, diasBase);
     const sm  = semaforo(pm);
-    const capturaHoy = s.diasCapturados.find(d => d.dia === diaActual);
+    const capturaHoy = s.diasCapturados.find(d => d.dia === diaOperativo);
     const mHoy = Number(montoInput) || 0;
 
     return (
       <div style={{ maxWidth: 520, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
+
         {/* Header */}
         <div style={{ background: col, borderRadius: 16, padding: "18px 24px", color: "#fff" }}>
           <div style={{ fontSize: 10, opacity: .75, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>
             {esSucursal ? "Mi sucursal" : "Avance de sucursal"} · {mesLabel}
           </div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>{suc}</div>
-          <div style={{ fontSize: 12, opacity: .75 }}>
-            {esSucursal ? "" : `Dir. ${dir} · `}{mesLabel} · Día hábil {diaActual}/{diasHabiles}
+          <div style={{ fontSize: 12, opacity: .75, marginBottom: 14 }}>
+            {esSucursal ? "" : `Dir. ${dir} · `}Día operativo {diaOperativo}/{diasOperativos} · Día base {diaBase}/{diasBase}
           </div>
 
           {/* KPIs */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
             {[
               { l: "Meta del mes", v: fmtMXN(s.metaMonto) },
               { l: "Acumulado", v: fmtMXN(acu) },
-              { l: `Esperado día ${diaActual}`, v: fmtMXN(esperadoHoy(s.metaMonto)) },
+              { l: `Esperado día base ${diaBase}`, v: fmtMXN(esperadoBase(s.metaMonto)) },
             ].map(item => (
               <div key={item.l} style={{ background: "rgba(255,255,255,0.15)", borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
                 <div style={{ fontSize: 9, opacity: .8, fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{item.l}</div>
@@ -353,42 +409,39 @@ export default function App() {
             ))}
           </div>
 
-          {/* Barra de progreso */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
+          {/* Barra */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ background: "rgba(255,255,255,0.25)", borderRadius: 99, height: 8, flex: 1 }}>
               <div style={{ width: `${Math.min(pm, 100)}%`, height: "100%", background: "#fff", borderRadius: 99 }} />
             </div>
             <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono'" }}>{pm}%</span>
             <span style={{ background: sm.bg, color: sm.color, fontSize: 10, fontWeight: 700, borderRadius: 20, padding: "2px 10px" }}>{sm.label}</span>
           </div>
-          <div style={{ fontSize: 10, opacity: .6, marginTop: 6 }}>% vs meta esperada al día hábil {diaActual} de {diasHabiles}</div>
+          <div style={{ fontSize: 10, opacity: .6, marginTop: 6 }}>% calculado sobre días base ({diaBase} de {diasBase})</div>
         </div>
 
-        {/* Día hábil info */}
+        {/* Captura */}
         <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.07)", border: "1px solid #e2e8f0" }}>
           <div style={{ background: "#f8fafc", padding: "12px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>📅 Captura del día hábil {diaActual}</div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>📅 Día operativo {diaOperativo}</div>
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Día base {diaBase} de {diasBase}</div>
+            </div>
             {capturaHoy
               ? <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: 10, fontWeight: 700, borderRadius: 20, padding: "2px 10px" }}>✓ Guardado</span>
-              : <span style={{ background: "#fef9c3", color: "#d97706", fontSize: 10, fontWeight: 700, borderRadius: 20, padding: "2px 10px" }}>Pendiente</span>
-            }
+              : <span style={{ background: "#fef9c3", color: "#d97706", fontSize: 10, fontWeight: 700, borderRadius: 20, padding: "2px 10px" }}>Pendiente</span>}
           </div>
           <div style={{ padding: 20 }}>
             {capturaHoy ? (
-              editDia?.dia === diaActual ? (
+              editDia?.dia === diaOperativo ? (
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 8 }}>Nuevo monto para el día {diaActual}</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={editDia.monto}
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 8 }}>Nuevo monto para el día operativo {diaOperativo}</label>
+                  <input type="text" inputMode="numeric" pattern="[0-9]*" value={editDia.monto}
                     onChange={e => setEditDia(d => ({ ...d, monto: e.target.value.replace(/[^0-9.]/g, "") }))}
-                    style={{ width: "100%", padding: "12px 14px", borderRadius: 10, border: `2px solid ${col}`, fontSize: 18, fontFamily: "'DM Mono'", outline: "none", boxSizing: "border-box" }}
-                  />
+                    style={{ width: "100%", padding: "12px 14px", borderRadius: 10, border: `2px solid ${col}`, fontSize: 18, fontFamily: "'DM Mono'", outline: "none", boxSizing: "border-box" }} />
                   <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                     <button onClick={() => setEditDia(null)} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontFamily: "inherit", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
-                    <button onClick={async () => { await guardarEnSheets(dir, suc, diaActual, editDia.monto); setEditDia(null); }} disabled={guardando}
+                    <button onClick={async () => { await guardarEnSheets(dir, suc, diaOperativo, editDia.monto); setEditDia(null); }} disabled={guardando}
                       style={{ flex: 2, padding: "11px", borderRadius: 10, border: "none", background: col, color: "#fff", fontFamily: "inherit", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                       {guardando ? <><Spinner color="#fff" /> Guardando...</> : "Guardar cambio"}
                     </button>
@@ -401,9 +454,9 @@ export default function App() {
                     <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "'DM Mono'", color: "#0f172a" }}>{fmtMXN(capturaHoy.monto)}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => setEditDia({ dia: diaActual, monto: String(capturaHoy.monto) })}
+                    <button onClick={() => setEditDia({ dia: diaOperativo, monto: String(capturaHoy.monto) })}
                       style={{ padding: "9px 14px", borderRadius: 8, border: `1.5px solid ${col}`, background: "#fff", color: col, fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>✏️ Editar</button>
-                    <button onClick={async () => { await borrarEnSheets(dir, suc, diaActual); }} disabled={guardando}
+                    <button onClick={async () => { await borrarEnSheets(dir, suc, diaOperativo); }} disabled={guardando}
                       style={{ padding: "9px 14px", borderRadius: 8, border: "1.5px solid #fca5a5", background: "#fff", color: "#dc2626", fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
                       {guardando ? "..." : "🗑 Borrar"}
                     </button>
@@ -413,26 +466,20 @@ export default function App() {
             ) : (
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: "#64748b", display: "block", marginBottom: 8 }}>
-                  💰 Monto colocado hoy (día hábil {diaActual})
+                  💰 Monto colocado hoy (día operativo {diaOperativo})
                 </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={montoInput}
+                <input type="text" inputMode="numeric" pattern="[0-9]*" value={montoInput}
                   onChange={e => setMontoInput(e.target.value.replace(/[^0-9.]/g, ""))}
                   placeholder="Escribe el monto aquí"
                   autoFocus
-                  style={{ width: "100%", padding: "14px 16px", borderRadius: 12, border: `2px solid ${col}`, fontSize: 20, fontFamily: "'DM Mono'", outline: "none", boxSizing: "border-box", color: "#0f172a" }}
-                />
+                  style={{ width: "100%", padding: "14px 16px", borderRadius: 12, border: `2px solid ${col}`, fontSize: 20, fontFamily: "'DM Mono'", outline: "none", boxSizing: "border-box", color: "#0f172a" }} />
                 {mHoy > 0 && (
                   <div style={{ background: "#f0fdf4", borderRadius: 10, padding: "10px 14px", marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 12, color: "#64748b" }}>Nuevo acumulado</span>
                     <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono'", color: "#16a34a" }}>{fmtMXN(acu + mHoy)}</span>
                   </div>
                 )}
-                <button
-                  onClick={async () => { if (mHoy > 0) { await guardarEnSheets(dir, suc, diaActual, montoInput); setMontoInput(""); } }}
+                <button onClick={async () => { if (mHoy > 0) { await guardarEnSheets(dir, suc, diaOperativo, montoInput); setMontoInput(""); } }}
                   disabled={!mHoy || guardando}
                   style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 12, border: "none", background: mHoy > 0 ? col : "#e2e8f0", color: mHoy > 0 ? "#fff" : "#94a3b8", fontFamily: "inherit", fontWeight: 700, fontSize: 15, cursor: mHoy > 0 ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                   {guardando ? <><Spinner color="#fff" /> Guardando en Sheets...</> : "Guardar captura"}
@@ -451,13 +498,13 @@ export default function App() {
             </div>
             <div>
               {s.diasCapturados.map((d, i) => {
-                const esHoy = d.dia === diaActual;
+                const esHoy = d.dia === diaOperativo;
                 const enEd  = editDia?.dia === d.dia && !esHoy;
                 return (
                   <div key={d.dia} style={{ padding: "12px 20px", borderTop: i > 0 ? "1px solid #f1f5f9" : "none", background: esHoy ? "#f0fdf4" : "#fff" }}>
                     {enEd ? (
                       <div>
-                        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>Editando día hábil {d.dia}</div>
+                        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>Editando día operativo {d.dia}</div>
                         <input type="text" inputMode="numeric" value={editDia.monto}
                           onChange={e => setEditDia(ed => ({ ...ed, monto: e.target.value.replace(/[^0-9.]/g, "") }))}
                           style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `2px solid ${col}`, fontSize: 16, fontFamily: "'DM Mono'", outline: "none", boxSizing: "border-box" }} />
@@ -472,7 +519,7 @@ export default function App() {
                     ) : (
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div>
-                          <div style={{ fontSize: 11, color: "#94a3b8" }}>Día hábil {d.dia}{esHoy ? " · hoy" : ""}</div>
+                          <div style={{ fontSize: 11, color: "#94a3b8" }}>Día operativo {d.dia}{esHoy ? " · hoy" : ""}</div>
                           <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'DM Mono'", color: "#0f172a" }}>{fmtMXN(d.monto)}</div>
                         </div>
                         <div style={{ display: "flex", gap: 6 }}>
@@ -500,6 +547,66 @@ export default function App() {
     );
   };
 
+  // ── TABLA DE SUCURSALES ───────────────────────────────────────────────
+  const TablaSucursales = ({ dir, conBoton }) => {
+    const col  = COLORES[dir];
+    const sucs = ESTRUCTURA[dir];
+    return (
+      <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.07)", border: "1px solid #e2e8f0" }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>Sucursales — {mesLabel}</div>
+          <div style={{ fontSize: 11, color: "#94a3b8" }}>Op. {diaOperativo}/{diasOperativos} · Base {diaBase}/{diasBase}</div>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#f8fafc" }}>
+                {["Sucursal","Meta","Acumulado","Esperado base","% Avance","Estado", ...(conBoton ? [""] : [])].map(h => (
+                  <th key={h} style={{ padding: "9px 14px", fontSize: 10, fontWeight: 600, color: "#64748b", textAlign: "left", whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: .5 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sucs.map((suc, i) => {
+                const s   = (data[dir] && data[dir][suc]) ? data[dir][suc] : { metaMonto: METAS_MONTO[suc] || 0, diasCapturados: [] };
+                const acu = acumulado(s);
+                const pm  = pctVsEsperado(acu, s.metaMonto, diaBase, diasBase);
+                const sm  = semaforo(pm);
+                return (
+                  <tr key={suc} style={{ borderTop: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
+                    <td style={{ padding: "12px 14px", fontWeight: 600, color: "#0f172a", fontSize: 13 }}>{suc}</td>
+                    <td style={{ padding: "12px 14px", fontSize: 12, color: "#64748b", fontFamily: "'DM Mono'" }}>{fmtMXN(s.metaMonto)}</td>
+                    <td style={{ padding: "12px 14px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Mono'", color: "#0f172a" }}>{fmtMXN(acu)}</td>
+                    <td style={{ padding: "12px 14px", fontSize: 12, color: "#64748b", fontFamily: "'DM Mono'" }}>{fmtMXN(esperadoBase(s.metaMonto))}</td>
+                    <td style={{ padding: "12px 14px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <div style={{ width: 50, background: "#f1f5f9", borderRadius: 99, height: 6, overflow: "hidden" }}>
+                          <div style={{ width: `${Math.min(pm, 100)}%`, height: "100%", background: sm.color, borderRadius: 99 }} />
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: sm.color, fontFamily: "'DM Mono'" }}>{pm}%</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: "12px 14px" }}>
+                      <span style={{ background: sm.bg, color: sm.color, fontSize: 10, fontWeight: 700, borderRadius: 20, padding: "3px 10px", whiteSpace: "nowrap" }}>{sm.label}</span>
+                    </td>
+                    {conBoton && (
+                      <td style={{ padding: "12px 14px" }}>
+                        <button onClick={() => { setEditando({ dir, suc }); setMontoInput(""); setEditDia(null); setVista("captura"); }}
+                          style={{ background: col, color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                          {s.diasCapturados.length > 0 ? "Ver / Editar" : "Capturar"}
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ fontFamily: "'DM Sans',sans-serif", background: "#f1f5f9", minHeight: "100vh" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -519,14 +626,12 @@ export default function App() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, color: "#94a3b8" }}>{mesLabel} · Día {diaActual}/{diasHabiles}</div>
-            <div style={{ fontSize: 11, color: "#94a3b8", display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
-              {cargando || guardando ? <><Spinner color="#94a3b8" /> {guardando ? "Guardando..." : "Sync..."}</> : ultimaSync ? `✓ ${ultimaSync.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}` : ""}
-            </div>
+            <div style={{ fontSize: 11, color: "#94a3b8" }}>{mesLabel}</div>
+            <div style={{ fontSize: 11, color: "#94a3b8" }}>Op. {diaOperativo}/{diasOperativos} · Base {diaBase}/{diasBase}</div>
           </div>
           <button onClick={cargarDatos} title="Actualizar" style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 8, color: "#fff", cursor: "pointer", padding: "6px 10px", fontSize: 14 }}>🔄</button>
           {esRegional && (
-            <button onClick={() => { setConfigForm({ diasHabiles, diaActual, mes: mesActual, anio: anioActual }); setConfigAbierta(true); }}
+            <button onClick={() => { setConfigForm({ diasOperativos, diasBase, diaOperativo, diaBase, mes: mesActual, anio: anioActual }); setConfigAbierta(true); }}
               style={{ background: "rgba(255,255,255,0.12)", border: "none", borderRadius: 8, color: "#fff", cursor: "pointer", padding: "6px 12px", fontSize: 12, fontFamily: "inherit" }}>⚙️ Período</button>
           )}
           <button onClick={() => setUsuario(null)} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 8, color: "#fff", cursor: "pointer", padding: "6px 12px", fontSize: 12, fontFamily: "inherit" }}>Salir</button>
@@ -565,7 +670,7 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Monto Colocado · Región Sur</div>
                   <div style={{ fontSize: 32, fontWeight: 700, color: "#0f172a", fontFamily: "'DM Mono'", letterSpacing: -1, marginTop: 2 }}>{fmtMXN(region.realM)}</div>
-                  <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>Meta: {fmtMXN(region.metaM)} · Esperado día {diaActual}: {fmtMXN(esperadoHoy(region.metaM))}</div>
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>Meta: {fmtMXN(region.metaM)} · Esperado base {diaBase}: {fmtMXN(esperadoBase(region.metaM))}</div>
                 </div>
                 <span style={{ background: semR.bg, color: semR.color, fontSize: 12, fontWeight: 700, borderRadius: 20, padding: "4px 14px" }}>{semR.label}</span>
               </div>
@@ -573,12 +678,16 @@ export default function App() {
                 <Barra pct={pctR} color={semR.color} />
                 <span style={{ fontSize: 15, fontWeight: 700, color: semR.color, fontFamily: "'DM Mono'", whiteSpace: "nowrap" }}>{pctR}%</span>
               </div>
-              <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 5 }}>% vs meta esperada al día hábil {diaActual} de {diasHabiles} · Actualización cada 60 seg</div>
+              <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 5 }}>
+                % calculado sobre días base · Día operativo {diaOperativo}/{diasOperativos} · Día base {diaBase}/{diasBase}
+              </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 14 }}>
               {Object.keys(ESTRUCTURA).map(dir => {
-                const col = COLORES[dir], tot = totalDir(data, dir), pct = pctVsEsperado(tot.realM, tot.metaM, diaActual, diasHabiles), sem = semaforo(pct), sucs = ESTRUCTURA[dir];
+                const col = COLORES[dir], tot = totalDir(data, dir);
+                const pct = pctVsEsperado(tot.realM, tot.metaM, diaBase, diasBase);
+                const sem = semaforo(pct), sucs = ESTRUCTURA[dir];
                 return (
                   <div key={dir} onClick={() => { setDirSel(dir); setVista("detalle"); }}
                     onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.12)"}
@@ -601,10 +710,12 @@ export default function App() {
                         <Barra pct={pct} color={col} />
                         <span style={{ fontSize: 12, fontWeight: 700, color: col, fontFamily: "'DM Mono'", whiteSpace: "nowrap" }}>{pct}%</span>
                       </div>
-                      <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 10 }}>Esperado día {diaActual}: {fmtMXN(esperadoHoy(tot.metaM))}</div>
+                      <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 10 }}>Esperado día base {diaBase}: {fmtMXN(esperadoBase(tot.metaM))}</div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                         {sucs.map(suc => {
-                          const s = data[dir]?.[suc], sp = pctVsEsperado(acumulado(s || { diasCapturados: [] }), s?.metaMonto || METAS_MONTO[suc], diaActual, diasHabiles), ss = semaforo(sp);
+                          const s = (data[dir] && data[dir][suc]) ? data[dir][suc] : { metaMonto: METAS_MONTO[suc] || 0, diasCapturados: [] };
+                          const sp = pctVsEsperado(acumulado(s), s.metaMonto, diaBase, diasBase);
+                          const ss = semaforo(sp);
                           return (
                             <div key={suc} style={{ background: ss.bg, color: ss.color, fontSize: 10, fontWeight: 600, borderRadius: 6, padding: "3px 8px", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
                               <span style={{ width: 6, height: 6, borderRadius: "50%", background: ss.color, display: "inline-block" }} />{suc}
@@ -621,13 +732,14 @@ export default function App() {
 
           {/* Dashboard dirección */}
           {vista === "dashboard" && esDireccion && (() => {
-            const dir = usuario.dir, col = COLORES[dir], tot = totalDir(data, dir), pct = pctVsEsperado(tot.realM, tot.metaM, diaActual, diasHabiles), sem = semaforo(pct), sucs = ESTRUCTURA[dir];
+            const dir = usuario.dir, col = COLORES[dir], tot = totalDir(data, dir);
+            const pct = pctVsEsperado(tot.realM, tot.metaM, diaBase, diasBase), sem = semaforo(pct);
             return (<>
               <div style={{ background: col, borderRadius: 16, padding: 22, marginBottom: 18, color: "#fff" }}>
                 <div style={{ fontSize: 10, opacity: .7, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>Mi Dirección · {mesLabel}</div>
                 <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>{dir}</div>
                 <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'DM Mono'", marginBottom: 4 }}>{fmtMXN(tot.realM)}</div>
-                <div style={{ fontSize: 13, opacity: .8, marginBottom: 12 }}>Meta: {fmtMXN(tot.metaM)} · Esperado día {diaActual}: {fmtMXN(esperadoHoy(tot.metaM))}</div>
+                <div style={{ fontSize: 13, opacity: .8, marginBottom: 12 }}>Meta: {fmtMXN(tot.metaM)} · Esperado día base {diaBase}: {fmtMXN(esperadoBase(tot.metaM))}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{ background: "rgba(255,255,255,0.25)", borderRadius: 99, height: 8, flex: 1 }}>
                     <div style={{ width: `${Math.min(pct, 100)}%`, height: "100%", background: "#fff", borderRadius: 99 }} />
@@ -635,61 +747,22 @@ export default function App() {
                   <span style={{ fontSize: 15, fontWeight: 700, fontFamily: "'DM Mono'" }}>{pct}%</span>
                   <span style={{ background: sem.bg, color: sem.color, fontSize: 11, fontWeight: 700, borderRadius: 20, padding: "3px 12px" }}>{sem.label}</span>
                 </div>
+                <div style={{ fontSize: 10, opacity: .6, marginTop: 6 }}>% calculado sobre días base ({diaBase} de {diasBase})</div>
               </div>
-              <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.07)", border: "1px solid #e2e8f0" }}>
-                <div style={{ padding: "14px 18px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>Mis Sucursales — {mesLabel}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8" }}>Día hábil {diaActual}/{diasHabiles}</div>
-                </div>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ background: "#f8fafc" }}>
-                        {["Sucursal","Meta","Acumulado","Esperado","% vs Esp.","Estado"].map(h => (
-                          <th key={h} style={{ padding: "9px 14px", fontSize: 10, fontWeight: 600, color: "#64748b", textAlign: "left", whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: .5 }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sucs.map((suc, i) => {
-                        const s = data[dir]?.[suc] || { metaMonto: METAS_MONTO[suc] || 0, diasCapturados: [] };
-                        const acu = acumulado(s), pm = pctVsEsperado(acu, s.metaMonto, diaActual, diasHabiles), sm = semaforo(pm);
-                        return (
-                          <tr key={suc} style={{ borderTop: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
-                            <td style={{ padding: "12px 14px", fontWeight: 600, color: "#0f172a", fontSize: 13 }}>{suc}</td>
-                            <td style={{ padding: "12px 14px", fontSize: 12, color: "#64748b", fontFamily: "'DM Mono'" }}>{fmtMXN(s.metaMonto)}</td>
-                            <td style={{ padding: "12px 14px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Mono'", color: "#0f172a" }}>{fmtMXN(acu)}</td>
-                            <td style={{ padding: "12px 14px", fontSize: 12, color: "#64748b", fontFamily: "'DM Mono'" }}>{fmtMXN(esperadoHoy(s.metaMonto))}</td>
-                            <td style={{ padding: "12px 14px" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <div style={{ width: 50, background: "#f1f5f9", borderRadius: 99, height: 6, overflow: "hidden" }}>
-                                  <div style={{ width: `${Math.min(pm, 100)}%`, height: "100%", background: sm.color, borderRadius: 99 }} />
-                                </div>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: sm.color, fontFamily: "'DM Mono'" }}>{pm}%</span>
-                              </div>
-                            </td>
-                            <td style={{ padding: "12px 14px" }}>
-                              <span style={{ background: sm.bg, color: sm.color, fontSize: 10, fontWeight: 700, borderRadius: 20, padding: "3px 10px", whiteSpace: "nowrap" }}>{sm.label}</span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <TablaSucursales dir={dir} conBoton={false} />
             </>);
           })()}
 
           {/* Detalle dirección (regional) */}
           {vista === "detalle" && dirSel && esRegional && (() => {
-            const col = COLORES[dirSel], tot = totalDir(data, dirSel), pct = pctVsEsperado(tot.realM, tot.metaM, diaActual, diasHabiles), sem = semaforo(pct), sucs = ESTRUCTURA[dirSel];
+            const col = COLORES[dirSel], tot = totalDir(data, dirSel);
+            const pct = pctVsEsperado(tot.realM, tot.metaM, diaBase, diasBase), sem = semaforo(pct);
             return (<>
               <div style={{ background: col, borderRadius: 16, padding: 22, marginBottom: 18, color: "#fff" }}>
                 <div style={{ fontSize: 10, opacity: .7, fontWeight: 600, letterSpacing: 1, textTransform: "uppercase" }}>Dirección</div>
                 <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>{dirSel}</div>
                 <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'DM Mono'", marginBottom: 4 }}>{fmtMXN(tot.realM)}</div>
-                <div style={{ fontSize: 13, opacity: .8, marginBottom: 12 }}>Meta: {fmtMXN(tot.metaM)} · Esperado día {diaActual}: {fmtMXN(esperadoHoy(tot.metaM))}</div>
+                <div style={{ fontSize: 13, opacity: .8, marginBottom: 12 }}>Meta: {fmtMXN(tot.metaM)} · Esperado día base {diaBase}: {fmtMXN(esperadoBase(tot.metaM))}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{ background: "rgba(255,255,255,0.25)", borderRadius: 99, height: 8, flex: 1 }}>
                     <div style={{ width: `${Math.min(pct, 100)}%`, height: "100%", background: "#fff", borderRadius: 99 }} />
@@ -697,55 +770,9 @@ export default function App() {
                   <span style={{ fontSize: 15, fontWeight: 700, fontFamily: "'DM Mono'" }}>{pct}%</span>
                   <span style={{ background: sem.bg, color: sem.color, fontSize: 11, fontWeight: 700, borderRadius: 20, padding: "3px 12px" }}>{sem.label}</span>
                 </div>
+                <div style={{ fontSize: 10, opacity: .6, marginTop: 6 }}>% calculado sobre días base ({diaBase} de {diasBase})</div>
               </div>
-              <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.07)", border: "1px solid #e2e8f0" }}>
-                <div style={{ padding: "14px 18px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>Sucursales — {mesLabel}</div>
-                  <div style={{ fontSize: 11, color: "#94a3b8" }}>Día hábil {diaActual}/{diasHabiles}</div>
-                </div>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ background: "#f8fafc" }}>
-                        {["Sucursal","Meta","Acumulado","Esperado","% vs Esp.","Estado",""].map(h => (
-                          <th key={h} style={{ padding: "9px 14px", fontSize: 10, fontWeight: 600, color: "#64748b", textAlign: "left", whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: .5 }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sucs.map((suc, i) => {
-                        const s = data[dirSel]?.[suc] || { metaMonto: METAS_MONTO[suc] || 0, diasCapturados: [] };
-                        const acu = acumulado(s), pm = pctVsEsperado(acu, s.metaMonto, diaActual, diasHabiles), sm = semaforo(pm);
-                        return (
-                          <tr key={suc} style={{ borderTop: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
-                            <td style={{ padding: "12px 14px", fontWeight: 600, color: "#0f172a", fontSize: 13 }}>{suc}</td>
-                            <td style={{ padding: "12px 14px", fontSize: 12, color: "#64748b", fontFamily: "'DM Mono'" }}>{fmtMXN(s.metaMonto)}</td>
-                            <td style={{ padding: "12px 14px", fontSize: 13, fontWeight: 600, fontFamily: "'DM Mono'", color: "#0f172a" }}>{fmtMXN(acu)}</td>
-                            <td style={{ padding: "12px 14px", fontSize: 12, color: "#64748b", fontFamily: "'DM Mono'" }}>{fmtMXN(esperadoHoy(s.metaMonto))}</td>
-                            <td style={{ padding: "12px 14px" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <div style={{ width: 50, background: "#f1f5f9", borderRadius: 99, height: 6, overflow: "hidden" }}>
-                                  <div style={{ width: `${Math.min(pm, 100)}%`, height: "100%", background: sm.color, borderRadius: 99 }} />
-                                </div>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: sm.color, fontFamily: "'DM Mono'" }}>{pm}%</span>
-                              </div>
-                            </td>
-                            <td style={{ padding: "12px 14px" }}>
-                              <span style={{ background: sm.bg, color: sm.color, fontSize: 10, fontWeight: 700, borderRadius: 20, padding: "3px 10px", whiteSpace: "nowrap" }}>{sm.label}</span>
-                            </td>
-                            <td style={{ padding: "12px 14px" }}>
-                              <button onClick={() => { setEditando({ dir: dirSel, suc }); setMontoInput(""); setEditDia(null); setVista("captura"); }}
-                                style={{ background: col, color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
-                                {s.diasCapturados.length > 0 ? "Ver / Editar" : "Capturar"}
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <TablaSucursales dir={dirSel} conBoton={true} />
             </>);
           })()}
 
