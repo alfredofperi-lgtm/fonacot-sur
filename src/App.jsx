@@ -222,7 +222,7 @@ export default function App() {
   const esDireccion = usuario?.tipo === "direccion";
   const esSucursal  = usuario?.tipo === "sucursal";
 
-  const cargarDatos = useCallback(async () => {
+  const cargarDatos = useCallback(async (actualizarPeriodo = false) => {
     try {
       setCargando(true);
       setErrorConexion(null);
@@ -231,7 +231,8 @@ export default function App() {
       const rows = await res.json();
       const { data: d, config } = buildData(Array.isArray(rows) ? rows : []);
       setData(d);
-      if (config) {
+      // Solo actualiza el período al entrar por primera vez, no al guardar capturas
+      if (actualizarPeriodo && config) {
         setDiasOperativos(config.diasOperativos);
         setDiasBase(config.diasBase);
         setDiaOperativo(config.diaOperativo);
@@ -245,10 +246,10 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => { if (usuario) cargarDatos(); }, [cargarDatos, usuario]);
+  useEffect(() => { if (usuario) cargarDatos(true); }, [cargarDatos, usuario]);
   useEffect(() => {
     if (!usuario) return;
-    const interval = setInterval(cargarDatos, 60000);
+    const interval = setInterval(() => cargarDatos(false), 60000);
     return () => clearInterval(interval);
   }, [cargarDatos, usuario]);
 
@@ -261,7 +262,7 @@ export default function App() {
     } catch (_) {}
     finally {
       await new Promise(r => setTimeout(r, 2000));
-      await cargarDatos();
+      await cargarDatos(false); // NO actualiza el período al guardar capturas
       setGuardando(false);
     }
   };
