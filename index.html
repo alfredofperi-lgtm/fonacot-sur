@@ -1,12 +1,408 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FONACOT Sur</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FONACOT · Región Sur · Seguimiento de Metas 2026</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>* { margin:0; padding:0; box-sizing:border-box; } body { font-family:'DM Sans',sans-serif; background:#f1f5f9; }</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+
+const { useState } = React;
+
+const ESTRUCTURA = {
+  "Villahermosa":     ["Villahermosa", "Ciudad del Carmen", "Coatzacoalcos"],
+  "Mérida":           ["Mérida", "Campeche", "Cancún", "Playa del Carmen", "Cozumel", "Chetumal"],
+  "Tuxtla Gutiérrez": ["Tuxtla Gutiérrez", "San Cristóbal de las Casas", "Tapachula", "Oaxaca", "Tuxtepec", "Salina Cruz"],
+  "Puebla":           ["Puebla", "Tehuacán", "Tlaxcala", "Veracruz", "Córdoba", "Xalapa", "Poza Rica"],
+};
+
+const COLORES = {
+  "Villahermosa":     "#0ea5e9",
+  "Mérida":           "#10b981",
+  "Tuxtla Gutiérrez": "#f59e0b",
+  "Puebla":           "#8b5cf6",
+};
+
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+const METAS_MONTO = {
+  "Villahermosa":               { Enero:91944678.79, Febrero:87260697.47, Marzo:107135005.61, Abril:89006450.18, Mayo:94669839.51, Junio:92590833.77, Julio:111852294.08, Agosto:105998874.45, Septiembre:111388703.34, Octubre:116849552.02, Noviembre:96517946.10, Diciembre:43905999.45 },
+  "Ciudad del Carmen":          { Enero:26695110.47, Febrero:28436608.44, Marzo:28338515.70, Abril:24473457.50, Mayo:24511280.51, Junio:28129448.78, Julio:28267410.54, Agosto:25951862.88, Septiembre:23916984.79, Octubre:28192610.16, Noviembre:26552310.42, Diciembre:13820728.03 },
+  "Coatzacoalcos":              { Enero:24032258.94, Febrero:24707422.88, Marzo:29800739.07, Abril:24713572.63, Mayo:25327654.39, Junio:25601587.22, Julio:32246739.72, Agosto:28671577.43, Septiembre:28844167.58, Octubre:28486102.66, Noviembre:26484433.86, Diciembre:16076133.04 },
+  "Mérida":                     { Enero:106887306.75, Febrero:116350181.10, Marzo:128515875.49, Abril:113984166.03, Mayo:114949776.46, Junio:118396008.97, Julio:127457806.11, Agosto:114879845.68, Septiembre:117661842.06, Octubre:131226395.97, Noviembre:113848942.08, Diciembre:70888311.12 },
+  "Campeche":                   { Enero:17629821.72, Febrero:21890001.53, Marzo:21859429.85, Abril:17275839.77, Mayo:22379662.20, Junio:19071516.09, Julio:22295498.23, Agosto:19745077.36, Septiembre:19391375.14, Octubre:25826684.36, Noviembre:17885430.34, Diciembre:15403124.06 },
+  "Cancún":                     { Enero:65435403.81, Febrero:64989477.23, Marzo:80476391.70, Abril:74126103.15, Mayo:78208861.22, Junio:76239500.59, Julio:84810124.78, Agosto:83291673.31, Septiembre:85686516.18, Octubre:88148822.48, Noviembre:82382509.99, Diciembre:43243706.30 },
+  "Playa del Carmen":           { Enero:18946399.06, Febrero:19971819.40, Marzo:19515723.31, Abril:18587829.56, Mayo:22641436.46, Junio:23765671.33, Julio:23693019.01, Agosto:23616489.14, Septiembre:24330172.78, Octubre:25706412.50, Noviembre:23494563.98, Diciembre:12378037.64 },
+  "Cozumel":                    { Enero:5459635.62, Febrero:5326554.18, Marzo:6517951.13, Abril:6069429.64, Mayo:5973464.30, Junio:6283320.64, Julio:10699537.52, Agosto:8457438.75, Septiembre:8403718.50, Octubre:8554203.51, Noviembre:6449701.99, Diciembre:3852626.76 },
+  "Chetumal":                   { Enero:9820796.84, Febrero:10094640.42, Marzo:12437597.26, Abril:10445898.28, Mayo:9960789.43, Junio:9557507.37, Julio:11484693.36, Agosto:8383293.74, Septiembre:9053725.67, Octubre:10526478.71, Noviembre:8616040.43, Diciembre:5824639.60 },
+  "Tuxtla Gutiérrez":           { Enero:57179404.81, Febrero:63685396.99, Marzo:64635421.58, Abril:60965648.92, Mayo:62762864.61, Junio:86093177.69, Julio:88118353.18, Agosto:80058369.76, Septiembre:72566420.18, Octubre:76958132.63, Noviembre:60353296.88, Diciembre:28410672.10 },
+  "San Cristóbal de las Casas": { Enero:6694409.50, Febrero:7304097.77, Marzo:7544595.27, Abril:6570786.62, Mayo:6322276.13, Junio:9450064.19, Julio:10903217.64, Agosto:9588585.07, Septiembre:9074133.92, Octubre:8256707.75, Noviembre:6534915.21, Diciembre:4043862.79 },
+  "Tapachula":                  { Enero:25609301.83, Febrero:25790613.91, Marzo:29530149.93, Abril:25940222.14, Mayo:25747927.81, Junio:26895875.57, Julio:28428650.60, Agosto:24512872.41, Septiembre:24675334.68, Octubre:25025274.84, Noviembre:23139037.79, Diciembre:13727245.77 },
+  "Oaxaca":                     { Enero:30748570.56, Febrero:32784997.91, Marzo:40188970.79, Abril:33384526.59, Mayo:40170895.74, Junio:32442671.32, Julio:38351227.76, Agosto:33365022.94, Septiembre:35027247.02, Octubre:36723128.27, Noviembre:29873368.87, Diciembre:17234257.92 },
+  "Tuxtepec":                   { Enero:12961427.88, Febrero:14863536.48, Marzo:16756888.88, Abril:15405472.06, Mayo:16147279.31, Junio:16418014.78, Julio:17919928.94, Agosto:17114025.90, Septiembre:16267540.52, Octubre:19134694.47, Noviembre:17271114.92, Diciembre:11172580.89 },
+  "Salina Cruz":                { Enero:12792029.27, Febrero:11666181.40, Marzo:14214693.61, Abril:11510562.60, Mayo:9461390.42, Junio:10394356.28, Julio:12396239.79, Agosto:12502992.64, Septiembre:12279886.26, Octubre:13096372.32, Noviembre:11221873.48, Diciembre:11483909.85 },
+  "Puebla":                     { Enero:92817028.80, Febrero:103184888.40, Marzo:110839654.00, Abril:106710482.01, Mayo:112823259.12, Junio:110794010.26, Julio:119016020.32, Agosto:122458284.19, Septiembre:115044197.00, Octubre:135181641.28, Noviembre:119721859.40, Diciembre:72172100.18 },
+  "Tehuacán":                   { Enero:17459438.19, Febrero:18693612.57, Marzo:18035984.13, Abril:14390873.12, Mayo:13691661.00, Junio:22324360.54, Julio:29960161.13, Agosto:23970000.00, Septiembre:21300537.69, Octubre:23146778.39, Noviembre:18983078.50, Diciembre:12699444.56 },
+  "Tlaxcala":                   { Enero:27972232.42, Febrero:33225829.71, Marzo:35596500.00, Abril:29270969.41, Mayo:38728801.71, Junio:40445563.50, Julio:41002241.88, Agosto:36914780.00, Septiembre:38588698.77, Octubre:44932469.15, Noviembre:34577546.00, Diciembre:25471463.63 },
+  "Veracruz":                   { Enero:61943000.00, Febrero:65026250.00, Marzo:73562500.00, Abril:60763750.00, Mayo:58175357.76, Junio:69363750.00, Julio:72045000.00, Agosto:65795000.00, Septiembre:75676250.00, Octubre:69275000.00, Noviembre:73670000.00, Diciembre:49200000.00 },
+  "Córdoba":                    { Enero:19940337.89, Febrero:30406597.68, Marzo:34247498.56, Abril:28713691.68, Mayo:28644555.43, Junio:28349835.08, Julio:30276217.97, Agosto:31568493.30, Septiembre:25764772.52, Octubre:36108120.23, Noviembre:27116194.67, Diciembre:21052799.82 },
+  "Xalapa":                     { Enero:16534722.91, Febrero:19752468.70, Marzo:21803340.60, Abril:17895135.86, Mayo:24591926.13, Junio:22155717.46, Julio:25046983.02, Agosto:15978691.14, Septiembre:22179277.51, Octubre:24619021.67, Noviembre:17344469.90, Diciembre:13373756.19 },
+  "Poza Rica":                  { Enero:10107130.10, Febrero:11276863.20, Marzo:8972884.69, Abril:10440864.78, Mayo:9573913.51, Junio:10777946.60, Julio:10648736.10, Agosto:9795623.23, Septiembre:9891888.19, Octubre:10889786.20, Noviembre:9068411.13, Diciembre:8491961.14 },
+};
+
+function semaforo(pct) {
+  if (pct >= 90) return { color:"#16a34a", bg:"#dcfce7", label:"Óptimo" };
+  if (pct >= 70) return { color:"#d97706", bg:"#fef9c3", label:"En riesgo" };
+  return { color:"#dc2626", bg:"#fee2e2", label:"Crítico" };
+}
+function pctVsEsperado(acum, meta, diaActual, diasHabiles) {
+  if (!meta || !diasHabiles || !diaActual) return 0;
+  const esp = (meta / diasHabiles) * diaActual;
+  return esp ? Math.round((acum / esp) * 100) : 0;
+}
+function fmtMXN(n) {
+  return new Intl.NumberFormat("es-MX",{ style:"currency", currency:"MXN", maximumFractionDigits:0 }).format(n);
+}
+function metaSuc(suc, mes) { return (METAS_MONTO[suc] && METAS_MONTO[suc][mes]) || 0; }
+
+const initAvances = () => {
+  const a = {};
+  MESES.forEach(mes => {
+    a[mes] = {};
+    Object.entries(ESTRUCTURA).forEach(([dir, sucs]) => {
+      a[mes][dir] = {};
+      sucs.forEach(suc => { a[mes][dir][suc] = []; });
+    });
+  });
+  return a;
+};
+function acumulado(lista) { return (lista||[]).reduce((s,d)=>s+d.monto,0); }
+function totalDir(avances, mes, dir) {
+  let metaM=0, realM=0;
+  ESTRUCTURA[dir].forEach(suc => { metaM+=metaSuc(suc,mes); realM+=acumulado(avances[mes][dir][suc]); });
+  return { metaM, realM };
+}
+function totalRegion(avances, mes) {
+  let metaM=0, realM=0;
+  Object.keys(ESTRUCTURA).forEach(dir => { const t=totalDir(avances,mes,dir); metaM+=t.metaM; realM+=t.realM; });
+  return { metaM, realM };
+}
+function Barra({ pct, color }) {
+  return (
+    <div style={{background:"#f1f5f9",borderRadius:99,height:8,overflow:"hidden",flex:1}}>
+      <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:color,borderRadius:99,transition:"width .5s"}} />
+    </div>
+  );
+}
+
+function App() {
+  const hoy = new Date();
+  const mesInicial = MESES[hoy.getMonth()];
+  const [avances,     setAvances]     = useState(initAvances);
+  const [mesActivo,   setMesActivo]   = useState(mesInicial);
+  const [diasHabiles, setDiasHabiles] = useState(22);
+  const [diaActual,   setDiaActual]   = useState(1);
+  const [configOpen,  setConfigOpen]  = useState(true);
+  const [configForm,  setConfigForm]  = useState({ diasHabiles:22, diaActual:1, mes:mesInicial });
+  const [vista,    setVista]    = useState("dashboard");
+  const [dirSel,   setDirSel]   = useState(null);
+  const [editando, setEditando] = useState(null);
+  const [montoHoy, setMontoHoy] = useState("");
+
+  const guardarConfig = () => {
+    setMesActivo(configForm.mes);
+    setDiasHabiles(Number(configForm.diasHabiles)||22);
+    setDiaActual(Number(configForm.diaActual)||1);
+    setConfigOpen(false);
+  };
+  const esperadoHoy = (meta) => Math.round((meta/diasHabiles)*diaActual);
+  const abrirCaptura = (dir,suc) => { setEditando({dir,suc}); setMontoHoy(""); setVista("captura"); };
+  const guardarCaptura = () => {
+    const {dir,suc} = editando;
+    const mHoy = Number(montoHoy)||0;
+    setAvances(prev => {
+      const lista = (prev[mesActivo][dir][suc]||[]).filter(d=>d.dia!==diaActual);
+      if(mHoy>0) lista.push({dia:diaActual,monto:mHoy});
+      return {...prev,[mesActivo]:{...prev[mesActivo],[dir]:{...prev[mesActivo][dir],[suc]:lista}}};
+    });
+    setVista(dirSel?"detalle":"dashboard"); setEditando(null);
+  };
+
+  const region = totalRegion(avances, mesActivo);
+  const pctR   = pctVsEsperado(region.realM, region.metaM, diaActual, diasHabiles);
+  const semR   = semaforo(pctR);
+
+  const ModalConfig = () => (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:420,overflow:"hidden",boxShadow:"0 8px 40px rgba(0,0,0,0.25)"}}>
+        <div style={{background:"linear-gradient(135deg,#1e293b,#0f172a)",padding:"22px 28px",color:"#fff"}}>
+          <div style={{fontSize:10,color:"#94a3b8",fontWeight:600,letterSpacing:2,textTransform:"uppercase"}}>FONACOT · Región Sur</div>
+          <div style={{fontSize:20,fontWeight:700,marginTop:2}}>Configuración del período</div>
+          <div style={{fontSize:13,color:"#94a3b8",marginTop:2}}>Las metas se actualizan automáticamente al cambiar el mes</div>
+        </div>
+        <div style={{padding:28,display:"flex",flexDirection:"column",gap:18}}>
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:"#64748b",display:"block",marginBottom:6}}>📅 Mes activo</label>
+            <select value={configForm.mes} onChange={e=>setConfigForm(p=>({...p,mes:e.target.value}))}
+              style={{width:"100%",padding:"11px 14px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:15,fontFamily:"inherit",outline:"none",boxSizing:"border-box",color:"#0f172a",background:"#fff"}}>
+              {MESES.map(m=><option key={m} value={m}>{m} 2026</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:"#64748b",display:"block",marginBottom:6}}>📊 Días hábiles del mes</label>
+            <input type="number" min="1" max="31" value={configForm.diasHabiles}
+              onChange={e=>setConfigForm(p=>({...p,diasHabiles:e.target.value}))}
+              style={{width:"100%",padding:"11px 14px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:16,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}} />
+            <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>Días hábiles Fonacot en el mes seleccionado</div>
+          </div>
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:"#64748b",display:"block",marginBottom:6}}>📍 Día hábil actual</label>
+            <input type="number" min="1" value={configForm.diaActual}
+              onChange={e=>setConfigForm(p=>({...p,diaActual:e.target.value}))}
+              style={{width:"100%",padding:"11px 14px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:16,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}} />
+            <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>Actualízalo cada día que abras la app</div>
+          </div>
+          <button onClick={guardarConfig} style={{padding:"13px",borderRadius:10,border:"none",background:"#0f172a",color:"#fff",fontFamily:"inherit",fontWeight:700,fontSize:15,cursor:"pointer"}}>
+            Aplicar y continuar →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{fontFamily:"'DM Sans',sans-serif",background:"#f1f5f9",minHeight:"100vh"}}>
+      {configOpen && <ModalConfig />}
+
+      <header style={{background:"linear-gradient(135deg,#1e293b,#0f172a)",color:"#fff",padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:64,boxShadow:"0 2px 16px rgba(0,0,0,0.25)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          {(vista==="detalle"||vista==="captura") && (
+            <button onClick={()=>{ if(vista==="captura"){setVista(dirSel?"detalle":"dashboard");setEditando(null);}else{setVista("dashboard");setDirSel(null);} }}
+              style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",padding:"6px 12px",fontSize:13,fontFamily:"inherit"}}>← Regresar</button>
+          )}
+          <div>
+            <div style={{fontSize:10,color:"#94a3b8",letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>FONACOT · Región Sur</div>
+            <div style={{fontSize:15,fontWeight:700}}>
+              {vista==="dashboard"?"Seguimiento de Metas":vista==="detalle"?`Dirección ${dirSel}`:`Captura — ${editando?.suc}`}
+            </div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:11,color:"#94a3b8"}}>{mesActivo} 2026</div>
+            <div style={{fontSize:12,fontWeight:600}}>Día hábil {diaActual} / {diasHabiles}</div>
+          </div>
+          <button onClick={()=>{setConfigForm({diasHabiles,diaActual,mes:mesActivo});setConfigOpen(true);}}
+            style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",padding:"6px 12px",fontSize:12,fontFamily:"inherit"}}>⚙️ Período</button>
+        </div>
+      </header>
+
+      <main style={{padding:20,maxWidth:1100,margin:"0 auto"}}>
+
+        {vista==="dashboard" && (<>
+          <div style={{background:"#fff",borderRadius:16,padding:22,marginBottom:18,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",border:"1px solid #e2e8f0"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+              <div>
+                <div style={{fontSize:11,color:"#64748b",fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Monto Colocado · Región Sur · {mesActivo} 2026</div>
+                <div style={{fontSize:32,fontWeight:700,color:"#0f172a",fontFamily:"'DM Mono'",letterSpacing:-1,marginTop:2}}>{fmtMXN(region.realM)}</div>
+                <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>Meta: {fmtMXN(region.metaM)} · Esperado día {diaActual}: {fmtMXN(esperadoHoy(region.metaM))}</div>
+              </div>
+              <span style={{background:semR.bg,color:semR.color,fontSize:12,fontWeight:700,borderRadius:20,padding:"4px 14px",whiteSpace:"nowrap"}}>{semR.label}</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <Barra pct={pctR} color={semR.color} />
+              <span style={{fontSize:15,fontWeight:700,color:semR.color,fontFamily:"'DM Mono'",whiteSpace:"nowrap"}}>{pctR}%</span>
+            </div>
+            <div style={{fontSize:10,color:"#94a3b8",marginTop:5}}>% vs meta esperada al día hábil {diaActual} de {diasHabiles}</div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:14}}>
+            {Object.keys(ESTRUCTURA).map(dir => {
+              const col=COLORES[dir], tot=totalDir(avances,mesActivo,dir);
+              const pct=pctVsEsperado(tot.realM,tot.metaM,diaActual,diasHabiles), sem=semaforo(pct);
+              return (
+                <div key={dir} onClick={()=>{setDirSel(dir);setVista("detalle");}}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 20px rgba(0,0,0,0.12)"}
+                  onMouseLeave={e=>e.currentTarget.style.boxShadow="0 1px 6px rgba(0,0,0,0.07)"}
+                  style={{background:"#fff",borderRadius:16,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.07)",border:"1px solid #e2e8f0",cursor:"pointer",transition:"box-shadow .2s",display:"flex",flexDirection:"column"}}>
+                  <div style={{background:col,padding:"14px 18px"}}>
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.7)",fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Dirección</div>
+                    <div style={{color:"#fff",fontSize:17,fontWeight:700,marginBottom:7}}>{dir}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{color:"rgba(255,255,255,0.85)",fontSize:11}}>{ESTRUCTURA[dir].length} sucursales</div>
+                      <span style={{background:sem.bg,color:sem.color,fontSize:10,fontWeight:700,borderRadius:20,padding:"2px 9px"}}>{sem.label}</span>
+                    </div>
+                  </div>
+                  <div style={{padding:"14px 18px",flex:1}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                      <span style={{fontSize:12,color:"#64748b"}}>Real / Meta</span>
+                      <span style={{fontSize:12,fontFamily:"'DM Mono'",fontWeight:600,color:"#0f172a"}}>{fmtMXN(tot.realM)} / {fmtMXN(tot.metaM)}</span>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                      <Barra pct={pct} color={col} />
+                      <span style={{fontSize:12,fontWeight:700,color:col,fontFamily:"'DM Mono'",whiteSpace:"nowrap"}}>{pct}%</span>
+                    </div>
+                    <div style={{fontSize:10,color:"#94a3b8",marginBottom:10}}>Esperado día {diaActual}: {fmtMXN(esperadoHoy(tot.metaM))}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                      {ESTRUCTURA[dir].map(suc => {
+                        const acu=acumulado(avances[mesActivo][dir][suc]);
+                        const sp=pctVsEsperado(acu,metaSuc(suc,mesActivo),diaActual,diasHabiles), ss=semaforo(sp);
+                        return (
+                          <div key={suc} style={{background:ss.bg,color:ss.color,fontSize:10,fontWeight:600,borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
+                            <span style={{width:6,height:6,borderRadius:"50%",background:ss.color,display:"inline-block",flexShrink:0}} />{suc}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>)}
+
+        {vista==="detalle" && dirSel && (()=>{
+          const col=COLORES[dirSel], tot=totalDir(avances,mesActivo,dirSel);
+          const pct=pctVsEsperado(tot.realM,tot.metaM,diaActual,diasHabiles), sem=semaforo(pct);
+          return (<>
+            <div style={{background:col,borderRadius:16,padding:22,marginBottom:18,color:"#fff"}}>
+              <div style={{fontSize:10,opacity:.7,fontWeight:600,letterSpacing:1,textTransform:"uppercase"}}>Dirección · {mesActivo} 2026</div>
+              <div style={{fontSize:24,fontWeight:700,marginBottom:4}}>{dirSel}</div>
+              <div style={{fontSize:28,fontWeight:700,fontFamily:"'DM Mono'",marginBottom:4}}>{fmtMXN(tot.realM)}</div>
+              <div style={{fontSize:13,opacity:.8,marginBottom:12}}>Meta: {fmtMXN(tot.metaM)} · Esperado día {diaActual}: {fmtMXN(esperadoHoy(tot.metaM))}</div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{background:"rgba(255,255,255,0.25)",borderRadius:99,height:8,flex:1}}>
+                  <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:"#fff",borderRadius:99}} />
+                </div>
+                <span style={{fontSize:15,fontWeight:700,fontFamily:"'DM Mono'"}}>{pct}%</span>
+                <span style={{background:sem.bg,color:sem.color,fontSize:11,fontWeight:700,borderRadius:20,padding:"3px 12px"}}>{sem.label}</span>
+              </div>
+            </div>
+            <div style={{background:"#fff",borderRadius:16,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.07)",border:"1px solid #e2e8f0"}}>
+              <div style={{padding:"14px 18px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontWeight:700,fontSize:14,color:"#0f172a"}}>Sucursales — {mesActivo} 2026</div>
+                <div style={{fontSize:11,color:"#94a3b8"}}>Día hábil {diaActual}/{diasHabiles}</div>
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead>
+                    <tr style={{background:"#f8fafc"}}>
+                      {["Sucursal","Meta Monto","Acumulado","Esperado hoy","% vs Esp.","Estado",""].map(h=>(
+                        <th key={h} style={{padding:"9px 14px",fontSize:10,fontWeight:600,color:"#64748b",textAlign:"left",whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:.5}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ESTRUCTURA[dirSel].map((suc,i)=>{
+                      const meta=metaSuc(suc,mesActivo), acu=acumulado(avances[mesActivo][dirSel][suc]);
+                      const pm=pctVsEsperado(acu,meta,diaActual,diasHabiles), sm=semaforo(pm);
+                      return (
+                        <tr key={suc} style={{borderTop:"1px solid #f1f5f9",background:i%2===0?"#fff":"#fafafa"}}>
+                          <td style={{padding:"12px 14px",fontWeight:600,color:"#0f172a",fontSize:13}}>{suc}</td>
+                          <td style={{padding:"12px 14px",fontSize:12,color:"#64748b",fontFamily:"'DM Mono'"}}>{fmtMXN(meta)}</td>
+                          <td style={{padding:"12px 14px",fontSize:13,fontWeight:600,fontFamily:"'DM Mono'",color:"#0f172a"}}>{fmtMXN(acu)}</td>
+                          <td style={{padding:"12px 14px",fontSize:12,color:"#64748b",fontFamily:"'DM Mono'"}}>{fmtMXN(esperadoHoy(meta))}</td>
+                          <td style={{padding:"12px 14px"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6}}>
+                              <div style={{width:50,background:"#f1f5f9",borderRadius:99,height:6,overflow:"hidden"}}>
+                                <div style={{width:`${Math.min(pm,100)}%`,height:"100%",background:sm.color,borderRadius:99}} />
+                              </div>
+                              <span style={{fontSize:11,fontWeight:700,color:sm.color,fontFamily:"'DM Mono'"}}>{pm}%</span>
+                            </div>
+                          </td>
+                          <td style={{padding:"12px 14px"}}>
+                            <span style={{background:sm.bg,color:sm.color,fontSize:10,fontWeight:700,borderRadius:20,padding:"3px 10px",whiteSpace:"nowrap"}}>{sm.label}</span>
+                          </td>
+                          <td style={{padding:"12px 14px"}}>
+                            <button onClick={e=>{e.stopPropagation();abrirCaptura(dirSel,suc);}}
+                              style={{background:col,color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+                              Capturar
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>);
+        })()}
+
+        {vista==="captura" && editando && (()=>{
+          const col=COLORES[editando.dir];
+          const meta=metaSuc(editando.suc,mesActivo);
+          const acu=acumulado(avances[mesActivo][editando.dir][editando.suc]);
+          const mHoy=Number(montoHoy)||0;
+          const prevPct=pctVsEsperado(acu+mHoy,meta,diaActual,diasHabiles), prevSem=semaforo(prevPct);
+          return (
+            <div style={{maxWidth:480,margin:"0 auto"}}>
+              <div style={{background:"#fff",borderRadius:16,overflow:"hidden",boxShadow:"0 2px 16px rgba(0,0,0,0.1)",border:"1px solid #e2e8f0"}}>
+                <div style={{background:col,padding:"18px 26px",color:"#fff"}}>
+                  <div style={{fontSize:10,opacity:.75,fontWeight:600,letterSpacing:1,textTransform:"uppercase"}}>Captura · {mesActivo} 2026</div>
+                  <div style={{fontSize:20,fontWeight:700}}>{editando.suc}</div>
+                  <div style={{fontSize:12,opacity:.75}}>Dirección {editando.dir} · Día hábil {diaActual}/{diasHabiles}</div>
+                </div>
+                <div style={{padding:24}}>
+                  <div style={{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:20,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+                    {[{label:"Meta mes",val:fmtMXN(meta)},{label:"Acumulado",val:fmtMXN(acu)},{label:"Esperado hoy",val:fmtMXN(esperadoHoy(meta))}].map(item=>(
+                      <div key={item.label} style={{textAlign:"center"}}>
+                        <div style={{fontSize:10,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",marginBottom:3}}>{item.label}</div>
+                        <div style={{fontSize:13,fontWeight:700,color:"#0f172a",fontFamily:"'DM Mono'"}}>{item.val}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{marginBottom:20}}>
+                    <label style={{display:"block",fontSize:12,fontWeight:600,color:"#64748b",marginBottom:6}}>💰 Monto colocado hoy (día hábil {diaActual})</label>
+                    <input type="number" min="0" value={montoHoy} onChange={e=>setMontoHoy(e.target.value)} placeholder="0"
+                      style={{width:"100%",padding:"12px 14px",borderRadius:10,border:`1.5px solid ${col}`,fontSize:18,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box",color:"#0f172a"}} />
+                  </div>
+                  {mHoy>0 && (
+                    <div style={{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:20}}>
+                      <div style={{fontSize:11,fontWeight:600,color:"#64748b",marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>Vista previa</div>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                        <span style={{fontSize:12,color:"#64748b"}}>Nuevo acumulado</span>
+                        <span style={{fontSize:13,fontWeight:700,fontFamily:"'DM Mono'",color:"#0f172a"}}>{fmtMXN(acu+mHoy)}</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                        <div style={{background:"#e2e8f0",borderRadius:99,height:8,flex:1,overflow:"hidden"}}>
+                          <div style={{width:`${Math.min(prevPct,100)}%`,height:"100%",background:prevSem.color,borderRadius:99}} />
+                        </div>
+                        <span style={{fontSize:13,fontWeight:700,color:prevSem.color,fontFamily:"'DM Mono'"}}>{prevPct}%</span>
+                      </div>
+                      <span style={{background:prevSem.bg,color:prevSem.color,fontSize:11,fontWeight:700,borderRadius:20,padding:"3px 12px"}}>{prevSem.label}</span>
+                      <div style={{fontSize:10,color:"#94a3b8",marginTop:8}}>% vs meta esperada al día hábil {diaActual} de {diasHabiles}</div>
+                    </div>
+                  )}
+                  <div style={{display:"flex",gap:10}}>
+                    <button onClick={()=>{setVista(dirSel?"detalle":"dashboard");setEditando(null);}}
+                      style={{flex:1,padding:"12px",borderRadius:10,border:"1.5px solid #e2e8f0",background:"#fff",color:"#64748b",fontFamily:"inherit",fontWeight:600,fontSize:13,cursor:"pointer"}}>
+                      Cancelar
+                    </button>
+                    <button onClick={guardarCaptura}
+                      style={{flex:2,padding:"12px",borderRadius:10,border:"none",background:col,color:"#fff",fontFamily:"inherit",fontWeight:700,fontSize:14,cursor:"pointer"}}>
+                      Guardar avance del día
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
 </html>
