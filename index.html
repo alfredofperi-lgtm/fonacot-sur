@@ -13,7 +13,6 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-
 const { useState } = React;
 
 const ESTRUCTURA = {
@@ -22,14 +21,7 @@ const ESTRUCTURA = {
   "Tuxtla Gutiérrez": ["Tuxtla Gutiérrez", "San Cristóbal de las Casas", "Tapachula", "Oaxaca", "Tuxtepec", "Salina Cruz"],
   "Puebla":           ["Puebla", "Tehuacán", "Tlaxcala", "Veracruz", "Córdoba", "Xalapa", "Poza Rica"],
 };
-
-const COLORES = {
-  "Villahermosa":     "#0ea5e9",
-  "Mérida":           "#10b981",
-  "Tuxtla Gutiérrez": "#f59e0b",
-  "Puebla":           "#8b5cf6",
-};
-
+const COLORES = { "Villahermosa":"#0ea5e9", "Mérida":"#10b981", "Tuxtla Gutiérrez":"#f59e0b", "Puebla":"#8b5cf6" };
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
 const METAS_MONTO = {
@@ -57,14 +49,18 @@ const METAS_MONTO = {
   "Poza Rica":                  { Enero:10107130.10, Febrero:11276863.20, Marzo:8972884.69, Abril:10440864.78, Mayo:9573913.51, Junio:10777946.60, Julio:10648736.10, Agosto:9795623.23, Septiembre:9891888.19, Octubre:10889786.20, Noviembre:9068411.13, Diciembre:8491961.14 },
 };
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function semaforo(pct) {
   if (pct >= 90) return { color:"#16a34a", bg:"#dcfce7", label:"Óptimo" };
   if (pct >= 70) return { color:"#d97706", bg:"#fef9c3", label:"En riesgo" };
   return { color:"#dc2626", bg:"#fee2e2", label:"Crítico" };
 }
-function pctVsEsperado(acum, meta, diaActual, diasHabiles) {
-  if (!meta || !diasHabiles || !diaActual) return 0;
-  const esp = (meta / diasHabiles) * diaActual;
+
+// Semáforo: acum (días operativos) vs esperado según días base transcurridos
+// diasBase = L-V del mes (denominador), diasBaseTransc = L-V transcurridos
+function pctVsEsperado(acum, meta, diasBaseTransc, diasBase) {
+  if (!meta || !diasBase || !diasBaseTransc) return 0;
+  const esp = (meta / diasBase) * diasBaseTransc;
   return esp ? Math.round((acum / esp) * 100) : 0;
 }
 function fmtMXN(n) {
@@ -83,6 +79,7 @@ const initAvances = () => {
   });
   return a;
 };
+// diasCapturados: [{ diaOp: N, monto: N }]  (diaOp = día operativo)
 function acumulado(lista) { return (lista||[]).reduce((s,d)=>s+d.monto,0); }
 function totalDir(avances, mes, dir) {
   let metaM=0, realM=0;
@@ -94,6 +91,7 @@ function totalRegion(avances, mes) {
   Object.keys(ESTRUCTURA).forEach(dir => { const t=totalDir(avances,mes,dir); metaM+=t.metaM; realM+=t.realM; });
   return { metaM, realM };
 }
+
 function Barra({ pct, color }) {
   return (
     <div style={{background:"#f1f5f9",borderRadius:99,height:8,overflow:"hidden",flex:1}}>
@@ -102,15 +100,23 @@ function Barra({ pct, color }) {
   );
 }
 
+// ── App ───────────────────────────────────────────────────────────────────────
 function App() {
   const hoy = new Date();
   const mesInicial = MESES[hoy.getMonth()];
-  const [avances,     setAvances]     = useState(initAvances);
-  const [mesActivo,   setMesActivo]   = useState(mesInicial);
-  const [diasHabiles, setDiasHabiles] = useState(22);
-  const [diaActual,   setDiaActual]   = useState(1);
-  const [configOpen,  setConfigOpen]  = useState(true);
-  const [configForm,  setConfigForm]  = useState({ diasHabiles:22, diaActual:1, mes:mesInicial });
+
+  // Configuración del período
+  const [mesActivo,      setMesActivo]      = useState(mesInicial);
+  const [diasBase,       setDiasBase]       = useState(22); // L-V del mes (denominador)
+  const [diasBaseTransc, setDiasBaseTransc] = useState(1);  // días base transcurridos (L-V)
+  const [diaOperativo,   setDiaOperativo]   = useState(1);  // día operativo actual (incluye sábados, para etiqueta de captura)
+
+  const [configOpen, setConfigOpen] = useState(true);
+  const [configForm, setConfigForm] = useState({
+    mes: mesInicial, diasBase:22, diasBaseTransc:1, diaOperativo:1
+  });
+
+  const [avances,  setAvances]  = useState(initAvances);
   const [vista,    setVista]    = useState("dashboard");
   const [dirSel,   setDirSel]   = useState(null);
   const [editando, setEditando] = useState(null);
@@ -118,58 +124,86 @@ function App() {
 
   const guardarConfig = () => {
     setMesActivo(configForm.mes);
-    setDiasHabiles(Number(configForm.diasHabiles)||22);
-    setDiaActual(Number(configForm.diaActual)||1);
+    setDiasBase(Number(configForm.diasBase)||22);
+    setDiasBaseTransc(Number(configForm.diasBaseTransc)||1);
+    setDiaOperativo(Number(configForm.diaOperativo)||1);
     setConfigOpen(false);
   };
-  const esperadoHoy = (meta) => Math.round((meta/diasHabiles)*diaActual);
+
+  // Meta esperada usa días base (L-V)
+  const esperadoHoy = (meta) => Math.round((meta / diasBase) * diasBaseTransc);
+
   const abrirCaptura = (dir,suc) => { setEditando({dir,suc}); setMontoHoy(""); setVista("captura"); };
+
   const guardarCaptura = () => {
     const {dir,suc} = editando;
     const mHoy = Number(montoHoy)||0;
     setAvances(prev => {
-      const lista = (prev[mesActivo][dir][suc]||[]).filter(d=>d.dia!==diaActual);
-      if(mHoy>0) lista.push({dia:diaActual,monto:mHoy});
+      const lista = (prev[mesActivo][dir][suc]||[]).filter(d=>d.diaOp!==diaOperativo);
+      if(mHoy>0) lista.push({ diaOp:diaOperativo, monto:mHoy });
       return {...prev,[mesActivo]:{...prev[mesActivo],[dir]:{...prev[mesActivo][dir],[suc]:lista}}};
     });
     setVista(dirSel?"detalle":"dashboard"); setEditando(null);
   };
 
   const region = totalRegion(avances, mesActivo);
-  const pctR   = pctVsEsperado(region.realM, region.metaM, diaActual, diasHabiles);
+  const pctR   = pctVsEsperado(region.realM, region.metaM, diasBaseTransc, diasBase);
   const semR   = semaforo(pctR);
 
+  // ── Modal ─────────────────────────────────────────────────────────────────
   const ModalConfig = () => (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:420,overflow:"hidden",boxShadow:"0 8px 40px rgba(0,0,0,0.25)"}}>
+      <div style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:440,overflow:"hidden",boxShadow:"0 8px 40px rgba(0,0,0,0.25)"}}>
         <div style={{background:"linear-gradient(135deg,#1e293b,#0f172a)",padding:"22px 28px",color:"#fff"}}>
           <div style={{fontSize:10,color:"#94a3b8",fontWeight:600,letterSpacing:2,textTransform:"uppercase"}}>FONACOT · Región Sur</div>
           <div style={{fontSize:20,fontWeight:700,marginTop:2}}>Configuración del período</div>
-          <div style={{fontSize:13,color:"#94a3b8",marginTop:2}}>Las metas se actualizan automáticamente al cambiar el mes</div>
+          <div style={{fontSize:13,color:"#94a3b8",marginTop:2}}>Las metas se actualizan al cambiar el mes</div>
         </div>
-        <div style={{padding:28,display:"flex",flexDirection:"column",gap:18}}>
+        <div style={{padding:28,display:"flex",flexDirection:"column",gap:16}}>
+
+          {/* Mes */}
           <div>
             <label style={{fontSize:12,fontWeight:600,color:"#64748b",display:"block",marginBottom:6}}>📅 Mes activo</label>
             <select value={configForm.mes} onChange={e=>setConfigForm(p=>({...p,mes:e.target.value}))}
-              style={{width:"100%",padding:"11px 14px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:15,fontFamily:"inherit",outline:"none",boxSizing:"border-box",color:"#0f172a",background:"#fff"}}>
+              style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:14,fontFamily:"inherit",outline:"none",boxSizing:"border-box",background:"#fff"}}>
               {MESES.map(m=><option key={m} value={m}>{m} 2026</option>)}
             </select>
           </div>
+
+          {/* Días base */}
           <div>
-            <label style={{fontSize:12,fontWeight:600,color:"#64748b",display:"block",marginBottom:6}}>📊 Días hábiles del mes</label>
-            <input type="number" min="1" max="31" value={configForm.diasHabiles}
-              onChange={e=>setConfigForm(p=>({...p,diasHabiles:e.target.value}))}
-              style={{width:"100%",padding:"11px 14px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:16,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}} />
-            <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>Días hábiles Fonacot en el mes seleccionado</div>
+            <label style={{fontSize:12,fontWeight:600,color:"#64748b",display:"block",marginBottom:4}}>
+              📊 Días base del mes <span style={{fontWeight:400,color:"#94a3b8"}}>(lunes a viernes)</span>
+            </label>
+            <input type="number" min="1" max="31" value={configForm.diasBase}
+              onChange={e=>setConfigForm(p=>({...p,diasBase:e.target.value}))}
+              style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:16,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}} />
+            <div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>Denominador para calcular la meta proporcional diaria</div>
           </div>
+
+          {/* Días base transcurridos */}
           <div>
-            <label style={{fontSize:12,fontWeight:600,color:"#64748b",display:"block",marginBottom:6}}>📍 Día hábil actual</label>
-            <input type="number" min="1" value={configForm.diaActual}
-              onChange={e=>setConfigForm(p=>({...p,diaActual:e.target.value}))}
-              style={{width:"100%",padding:"11px 14px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:16,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}} />
-            <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>Actualízalo cada día que abras la app</div>
+            <label style={{fontSize:12,fontWeight:600,color:"#64748b",display:"block",marginBottom:4}}>
+              📍 Días base transcurridos <span style={{fontWeight:400,color:"#94a3b8"}}>(L-V vencidos)</span>
+            </label>
+            <input type="number" min="0" value={configForm.diasBaseTransc}
+              onChange={e=>setConfigForm(p=>({...p,diasBaseTransc:e.target.value}))}
+              style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:16,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}} />
+            <div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>Numerador del semáforo — días L-V que ya pasaron este mes</div>
           </div>
-          <button onClick={guardarConfig} style={{padding:"13px",borderRadius:10,border:"none",background:"#0f172a",color:"#fff",fontFamily:"inherit",fontWeight:700,fontSize:15,cursor:"pointer"}}>
+
+          {/* Día operativo actual */}
+          <div>
+            <label style={{fontSize:12,fontWeight:600,color:"#64748b",display:"block",marginBottom:4}}>
+              🗓 Día operativo actual <span style={{fontWeight:400,color:"#94a3b8"}}>(incluye sábados)</span>
+            </label>
+            <input type="number" min="1" value={configForm.diaOperativo}
+              onChange={e=>setConfigForm(p=>({...p,diaOperativo:e.target.value}))}
+              style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:16,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box"}} />
+            <div style={{fontSize:11,color:"#94a3b8",marginTop:3}}>Se usa como referencia en la captura del avance del día</div>
+          </div>
+
+          <button onClick={guardarConfig} style={{padding:"13px",borderRadius:10,border:"none",background:"#0f172a",color:"#fff",fontFamily:"inherit",fontWeight:700,fontSize:15,cursor:"pointer",marginTop:4}}>
             Aplicar y continuar →
           </button>
         </div>
@@ -177,10 +211,12 @@ function App() {
     </div>
   );
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{fontFamily:"'DM Sans',sans-serif",background:"#f1f5f9",minHeight:"100vh"}}>
       {configOpen && <ModalConfig />}
 
+      {/* HEADER */}
       <header style={{background:"linear-gradient(135deg,#1e293b,#0f172a)",color:"#fff",padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",height:64,boxShadow:"0 2px 16px rgba(0,0,0,0.25)"}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           {(vista==="detalle"||vista==="captura") && (
@@ -197,22 +233,26 @@ function App() {
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{textAlign:"right"}}>
             <div style={{fontSize:11,color:"#94a3b8"}}>{mesActivo} 2026</div>
-            <div style={{fontSize:12,fontWeight:600}}>Día hábil {diaActual} / {diasHabiles}</div>
+            <div style={{fontSize:11,color:"#94a3b8"}}>Base {diasBaseTransc}/{diasBase} · Op. {diaOperativo}</div>
           </div>
-          <button onClick={()=>{setConfigForm({diasHabiles,diaActual,mes:mesActivo});setConfigOpen(true);}}
+          <button onClick={()=>{setConfigForm({mes:mesActivo,diasBase,diasBaseTransc,diaOperativo});setConfigOpen(true);}}
             style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",padding:"6px 12px",fontSize:12,fontFamily:"inherit"}}>⚙️ Período</button>
         </div>
       </header>
 
       <main style={{padding:20,maxWidth:1100,margin:"0 auto"}}>
 
+        {/* ══════ DASHBOARD ══════ */}
         {vista==="dashboard" && (<>
+          {/* KPI Región */}
           <div style={{background:"#fff",borderRadius:16,padding:22,marginBottom:18,boxShadow:"0 1px 6px rgba(0,0,0,0.07)",border:"1px solid #e2e8f0"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
               <div>
                 <div style={{fontSize:11,color:"#64748b",fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Monto Colocado · Región Sur · {mesActivo} 2026</div>
                 <div style={{fontSize:32,fontWeight:700,color:"#0f172a",fontFamily:"'DM Mono'",letterSpacing:-1,marginTop:2}}>{fmtMXN(region.realM)}</div>
-                <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>Meta: {fmtMXN(region.metaM)} · Esperado día {diaActual}: {fmtMXN(esperadoHoy(region.metaM))}</div>
+                <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>
+                  Meta: {fmtMXN(region.metaM)} · Esperado ({diasBaseTransc} días base): {fmtMXN(esperadoHoy(region.metaM))}
+                </div>
               </div>
               <span style={{background:semR.bg,color:semR.color,fontSize:12,fontWeight:700,borderRadius:20,padding:"4px 14px",whiteSpace:"nowrap"}}>{semR.label}</span>
             </div>
@@ -220,13 +260,16 @@ function App() {
               <Barra pct={pctR} color={semR.color} />
               <span style={{fontSize:15,fontWeight:700,color:semR.color,fontFamily:"'DM Mono'",whiteSpace:"nowrap"}}>{pctR}%</span>
             </div>
-            <div style={{fontSize:10,color:"#94a3b8",marginTop:5}}>% vs meta esperada al día hábil {diaActual} de {diasHabiles}</div>
+            <div style={{fontSize:10,color:"#94a3b8",marginTop:5}}>
+              Acumulado días operativos vs meta proporcional a {diasBaseTransc} días base de {diasBase}
+            </div>
           </div>
 
+          {/* Tarjetas direcciones */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:14}}>
             {Object.keys(ESTRUCTURA).map(dir => {
               const col=COLORES[dir], tot=totalDir(avances,mesActivo,dir);
-              const pct=pctVsEsperado(tot.realM,tot.metaM,diaActual,diasHabiles), sem=semaforo(pct);
+              const pct=pctVsEsperado(tot.realM,tot.metaM,diasBaseTransc,diasBase), sem=semaforo(pct);
               return (
                 <div key={dir} onClick={()=>{setDirSel(dir);setVista("detalle");}}
                   onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 20px rgba(0,0,0,0.12)"}
@@ -249,11 +292,11 @@ function App() {
                       <Barra pct={pct} color={col} />
                       <span style={{fontSize:12,fontWeight:700,color:col,fontFamily:"'DM Mono'",whiteSpace:"nowrap"}}>{pct}%</span>
                     </div>
-                    <div style={{fontSize:10,color:"#94a3b8",marginBottom:10}}>Esperado día {diaActual}: {fmtMXN(esperadoHoy(tot.metaM))}</div>
+                    <div style={{fontSize:10,color:"#94a3b8",marginBottom:10}}>Esperado: {fmtMXN(esperadoHoy(tot.metaM))}</div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                       {ESTRUCTURA[dir].map(suc => {
                         const acu=acumulado(avances[mesActivo][dir][suc]);
-                        const sp=pctVsEsperado(acu,metaSuc(suc,mesActivo),diaActual,diasHabiles), ss=semaforo(sp);
+                        const sp=pctVsEsperado(acu,metaSuc(suc,mesActivo),diasBaseTransc,diasBase), ss=semaforo(sp);
                         return (
                           <div key={suc} style={{background:ss.bg,color:ss.color,fontSize:10,fontWeight:600,borderRadius:6,padding:"3px 8px",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
                             <span style={{width:6,height:6,borderRadius:"50%",background:ss.color,display:"inline-block",flexShrink:0}} />{suc}
@@ -268,15 +311,18 @@ function App() {
           </div>
         </>)}
 
+        {/* ══════ DETALLE DIRECCIÓN ══════ */}
         {vista==="detalle" && dirSel && (()=>{
           const col=COLORES[dirSel], tot=totalDir(avances,mesActivo,dirSel);
-          const pct=pctVsEsperado(tot.realM,tot.metaM,diaActual,diasHabiles), sem=semaforo(pct);
+          const pct=pctVsEsperado(tot.realM,tot.metaM,diasBaseTransc,diasBase), sem=semaforo(pct);
           return (<>
             <div style={{background:col,borderRadius:16,padding:22,marginBottom:18,color:"#fff"}}>
               <div style={{fontSize:10,opacity:.7,fontWeight:600,letterSpacing:1,textTransform:"uppercase"}}>Dirección · {mesActivo} 2026</div>
               <div style={{fontSize:24,fontWeight:700,marginBottom:4}}>{dirSel}</div>
               <div style={{fontSize:28,fontWeight:700,fontFamily:"'DM Mono'",marginBottom:4}}>{fmtMXN(tot.realM)}</div>
-              <div style={{fontSize:13,opacity:.8,marginBottom:12}}>Meta: {fmtMXN(tot.metaM)} · Esperado día {diaActual}: {fmtMXN(esperadoHoy(tot.metaM))}</div>
+              <div style={{fontSize:13,opacity:.8,marginBottom:12}}>
+                Meta: {fmtMXN(tot.metaM)} · Esperado ({diasBaseTransc} días base): {fmtMXN(esperadoHoy(tot.metaM))}
+              </div>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <div style={{background:"rgba(255,255,255,0.25)",borderRadius:99,height:8,flex:1}}>
                   <div style={{width:`${Math.min(pct,100)}%`,height:"100%",background:"#fff",borderRadius:99}} />
@@ -288,13 +334,13 @@ function App() {
             <div style={{background:"#fff",borderRadius:16,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.07)",border:"1px solid #e2e8f0"}}>
               <div style={{padding:"14px 18px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div style={{fontWeight:700,fontSize:14,color:"#0f172a"}}>Sucursales — {mesActivo} 2026</div>
-                <div style={{fontSize:11,color:"#94a3b8"}}>Día hábil {diaActual}/{diasHabiles}</div>
+                <div style={{fontSize:11,color:"#94a3b8"}}>Base {diasBaseTransc}/{diasBase} · Op. día {diaOperativo}</div>
               </div>
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse"}}>
                   <thead>
                     <tr style={{background:"#f8fafc"}}>
-                      {["Sucursal","Meta Monto","Acumulado","Esperado hoy","% vs Esp.","Estado",""].map(h=>(
+                      {["Sucursal","Meta Monto","Acumulado","Esperado","% vs Esp.","Estado",""].map(h=>(
                         <th key={h} style={{padding:"9px 14px",fontSize:10,fontWeight:600,color:"#64748b",textAlign:"left",whiteSpace:"nowrap",textTransform:"uppercase",letterSpacing:.5}}>{h}</th>
                       ))}
                     </tr>
@@ -302,7 +348,7 @@ function App() {
                   <tbody>
                     {ESTRUCTURA[dirSel].map((suc,i)=>{
                       const meta=metaSuc(suc,mesActivo), acu=acumulado(avances[mesActivo][dirSel][suc]);
-                      const pm=pctVsEsperado(acu,meta,diaActual,diasHabiles), sm=semaforo(pm);
+                      const pm=pctVsEsperado(acu,meta,diasBaseTransc,diasBase), sm=semaforo(pm);
                       return (
                         <tr key={suc} style={{borderTop:"1px solid #f1f5f9",background:i%2===0?"#fff":"#fafafa"}}>
                           <td style={{padding:"12px 14px",fontWeight:600,color:"#0f172a",fontSize:13}}>{suc}</td>
@@ -336,23 +382,26 @@ function App() {
           </>);
         })()}
 
+        {/* ══════ CAPTURA ══════ */}
         {vista==="captura" && editando && (()=>{
           const col=COLORES[editando.dir];
           const meta=metaSuc(editando.suc,mesActivo);
           const acu=acumulado(avances[mesActivo][editando.dir][editando.suc]);
           const mHoy=Number(montoHoy)||0;
-          const prevPct=pctVsEsperado(acu+mHoy,meta,diaActual,diasHabiles), prevSem=semaforo(prevPct);
+          const prevPct=pctVsEsperado(acu+mHoy,meta,diasBaseTransc,diasBase), prevSem=semaforo(prevPct);
           return (
             <div style={{maxWidth:480,margin:"0 auto"}}>
               <div style={{background:"#fff",borderRadius:16,overflow:"hidden",boxShadow:"0 2px 16px rgba(0,0,0,0.1)",border:"1px solid #e2e8f0"}}>
                 <div style={{background:col,padding:"18px 26px",color:"#fff"}}>
                   <div style={{fontSize:10,opacity:.75,fontWeight:600,letterSpacing:1,textTransform:"uppercase"}}>Captura · {mesActivo} 2026</div>
                   <div style={{fontSize:20,fontWeight:700}}>{editando.suc}</div>
-                  <div style={{fontSize:12,opacity:.75}}>Dirección {editando.dir} · Día hábil {diaActual}/{diasHabiles}</div>
+                  <div style={{fontSize:12,opacity:.75}}>
+                    Dirección {editando.dir} · Día operativo {diaOperativo} · Días base {diasBaseTransc}/{diasBase}
+                  </div>
                 </div>
                 <div style={{padding:24}}>
                   <div style={{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:20,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
-                    {[{label:"Meta mes",val:fmtMXN(meta)},{label:"Acumulado",val:fmtMXN(acu)},{label:"Esperado hoy",val:fmtMXN(esperadoHoy(meta))}].map(item=>(
+                    {[{label:"Meta mes",val:fmtMXN(meta)},{label:"Acumulado",val:fmtMXN(acu)},{label:"Esperado",val:fmtMXN(esperadoHoy(meta))}].map(item=>(
                       <div key={item.label} style={{textAlign:"center"}}>
                         <div style={{fontSize:10,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",marginBottom:3}}>{item.label}</div>
                         <div style={{fontSize:13,fontWeight:700,color:"#0f172a",fontFamily:"'DM Mono'"}}>{item.val}</div>
@@ -360,7 +409,9 @@ function App() {
                     ))}
                   </div>
                   <div style={{marginBottom:20}}>
-                    <label style={{display:"block",fontSize:12,fontWeight:600,color:"#64748b",marginBottom:6}}>💰 Monto colocado hoy (día hábil {diaActual})</label>
+                    <label style={{display:"block",fontSize:12,fontWeight:600,color:"#64748b",marginBottom:6}}>
+                      💰 Monto colocado hoy (día operativo {diaOperativo})
+                    </label>
                     <input type="number" min="0" value={montoHoy} onChange={e=>setMontoHoy(e.target.value)} placeholder="0"
                       style={{width:"100%",padding:"12px 14px",borderRadius:10,border:`1.5px solid ${col}`,fontSize:18,fontFamily:"'DM Mono',monospace",outline:"none",boxSizing:"border-box",color:"#0f172a"}} />
                   </div>
@@ -378,7 +429,9 @@ function App() {
                         <span style={{fontSize:13,fontWeight:700,color:prevSem.color,fontFamily:"'DM Mono'"}}>{prevPct}%</span>
                       </div>
                       <span style={{background:prevSem.bg,color:prevSem.color,fontSize:11,fontWeight:700,borderRadius:20,padding:"3px 12px"}}>{prevSem.label}</span>
-                      <div style={{fontSize:10,color:"#94a3b8",marginTop:8}}>% vs meta esperada al día hábil {diaActual} de {diasHabiles}</div>
+                      <div style={{fontSize:10,color:"#94a3b8",marginTop:8}}>
+                        Acumulado días operativos vs meta proporcional a {diasBaseTransc} días base
+                      </div>
                     </div>
                   )}
                   <div style={{display:"flex",gap:10}}>
